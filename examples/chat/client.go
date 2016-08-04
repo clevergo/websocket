@@ -18,7 +18,7 @@ const (
 	writeWait = 10 * time.Second
 
 	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	pongWait = 5 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
@@ -31,7 +31,7 @@ var (
 	newline = []byte{'\n'}
 	space   = []byte{' '}
 
-	// Should not be empty, otherwise it will crash the server.
+	// Should not be empty, otherwise the server will be crashed on some devices.
 	pingMsg = []byte("PING")
 )
 
@@ -49,6 +49,9 @@ type Client struct {
 
 	// Buffered channel of outbound messages.
 	send chan []byte
+
+	// Close channel for unexpected close error.
+	close chan bool
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -69,7 +72,10 @@ func (c *Client) readPump() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.Printf("error: %v", err)
 			}
-			break
+			// You should send the closed message to the close channel,
+			// otherwise, the server will be crashed.
+			c.close <- true
+			return
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 		c.hub.broadcast <- message
@@ -91,6 +97,10 @@ func (c *Client) writePump() {
 	}()
 	for {
 		select {
+		case close := <-c.close:
+			if close {
+				return
+			}
 		case message, ok := <-c.send:
 			if !ok {
 				// The hub closed the channel.
@@ -126,7 +136,7 @@ func (c *Client) writePump() {
 // serveWs handles websocket requests from the peer.
 func serveWs(hub *Hub, ctx *fasthttp.RequestCtx) {
 	err := upgrader.Upgrade(ctx, func(conn *websocket.Conn) {
-		client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+		client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), close: make(chan bool)}
 		client.hub.register <- client
 		go client.writePump()
 		client.readPump()
