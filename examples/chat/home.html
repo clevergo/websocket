@@ -50,6 +50,9 @@
             }
 
             document.getElementById("open").onclick = function () {
+                if (conn) {
+                    return;
+                }
                 connect();
             }
 
