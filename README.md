@@ -22,7 +22,7 @@ package API is stable.
 
 ### Installation
 
-    go get github.com/gorilla/websocket
+    go get github.com/clevergo/websocket
 
 ### Protocol Compliance
 
